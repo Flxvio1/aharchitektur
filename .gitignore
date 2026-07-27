@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# source video for the hero sequence — kept locally, not in git.
+# only the extracted frames in public/hero/ are served. use Git LFS if these
+# ever need to be versioned.
+/assets/video/

@@ -2,25 +2,123 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #14110c;
+  --muted: #6b6459;
+  --line: rgba(20, 17, 12, 0.14);
+  --accent: #a9793f;
+  /* driven by ScrollSequence: 0 over the white plan, 1 over the dusk render */
+  --seq-progress: 0;
+  --nav-invert: 0;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-cormorant);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Lenis needs these to stop the browser's own smooth scrolling from fighting
+   its rAF-driven position updates */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* iPhone-style notch: the concave fillets that let the centre block flow
+   smoothly out of the top edge instead of butting against it. */
+.nav-fillet {
+  width: var(--notch-r);
+  height: var(--notch-r);
+  flex: none;
+}
+
+.nav-fillet-left {
+  background: radial-gradient(
+    circle at bottom left,
+    transparent calc(var(--notch-r) - 0.5px),
+    var(--foreground) calc(var(--notch-r) + 0.5px)
+  );
+}
+
+.nav-fillet-right {
+  background: radial-gradient(
+    circle at bottom right,
+    transparent calc(var(--notch-r) - 0.5px),
+    var(--foreground) calc(var(--notch-r) + 0.5px)
+  );
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* the notch reads as part of the top edge, so it should arrive by sliding
+   out of that edge rather than fading in place */
+@keyframes notch-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rule-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* slow drift on the scroll cue — the sequence needs the wheel to start, so
+   the invitation has to keep moving */
+@keyframes cue-drift {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.55;
+  }
+  50% {
+    transform: translateY(6px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
