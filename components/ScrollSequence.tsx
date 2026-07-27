@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 
-const FRAME_COUNT = 240;
 // frames fetched up front so the first paint is never an empty canvas
 const EAGER_COUNT = 24;
 // How hard the drawn frame chases the scroll position. Kept fairly tight
@@ -10,19 +9,39 @@ const EAGER_COUNT = 24;
 // reads as lag rather than smoothness.
 const SMOOTHING = 0.22;
 
-// window of the sequence over which the closing statement resolves
+// window of the sequence over which an outro overlay resolves
 const OUTRO_START = 0.7;
 const OUTRO_END = 0.92;
 
-function framePath(set: 768 | 1440, index: number) {
-  return `/hero/${set}/frame_${String(index + 1).padStart(4, "0")}.webp`;
-}
+type Props = {
+  /** folder under /public holding the frame sets */
+  name: string;
+  /** must match what scripts/generate-frames.mjs produced */
+  frameCount: number;
+  /** frame-set widths: [below 900px viewport, at or above] */
+  sets: [number, number];
+  /** scroll distance the sequence occupies, in vh */
+  heightVh?: number;
+  /** classes for the canvas — lets a caller inset or mask the panel */
+  canvasClassName?: string;
+  /**
+   * Publish progress and backdrop luminance globally. Only the hero should do
+   * this: it is what the fixed header reads to stay legible, and two
+   * sequences writing the same custom properties would fight each other.
+   */
+  publishGlobals?: boolean;
+  children?: React.ReactNode;
+};
 
 export default function ScrollSequence({
+  name,
+  frameCount,
+  sets,
+  heightVh = 320,
+  canvasClassName = "absolute inset-0 h-full w-full",
+  publishGlobals = false,
   children,
-}: {
-  children?: React.ReactNode;
-}) {
+}: Props) {
   const sectionRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -36,11 +55,11 @@ export default function ScrollSequence({
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
 
-    const set: 768 | 1440 = window.innerWidth < 900 ? 768 : 1440;
+    const set = window.innerWidth < 900 ? sets[0] : sets[1];
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const images = new Array<HTMLImageElement | undefined>(FRAME_COUNT);
-    const loaded = new Array<boolean>(FRAME_COUNT).fill(false);
+    const images = new Array<HTMLImageElement | undefined>(frameCount);
+    const loaded = new Array<boolean>(frameCount).fill(false);
 
     let disposed = false;
     let rafId = 0;
@@ -49,6 +68,10 @@ export default function ScrollSequence({
     let inView = true;
     let navInvert = 0;
     let sampleTick = 0;
+
+    function framePath(index: number) {
+      return `/${name}/${set}/frame_${String(index + 1).padStart(4, "0")}.webp`;
+    }
 
     function loadFrame(i: number) {
       return new Promise<void>((resolve) => {
@@ -59,7 +82,7 @@ export default function ScrollSequence({
           resolve();
         };
         img.onerror = () => resolve();
-        img.src = framePath(set, i);
+        img.src = framePath(i);
         images[i] = img;
       });
     }
@@ -68,9 +91,9 @@ export default function ScrollSequence({
     // shows the closest available frame instead of a blank gap
     function nearestLoaded(i: number) {
       if (loaded[i]) return images[i];
-      for (let d = 1; d < FRAME_COUNT; d++) {
+      for (let d = 1; d < frameCount; d++) {
         if (i - d >= 0 && loaded[i - d]) return images[i - d];
-        if (i + d < FRAME_COUNT && loaded[i + d]) return images[i + d];
+        if (i + d < frameCount && loaded[i + d]) return images[i + d];
       }
       return undefined;
     }
@@ -78,10 +101,8 @@ export default function ScrollSequence({
     function resize() {
       if (!canvas || !ctx) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
+      canvas.width = Math.round(canvas.clientWidth * dpr);
+      canvas.height = Math.round(canvas.clientHeight * dpr);
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -105,7 +126,7 @@ export default function ScrollSequence({
       const floor = Math.floor(current);
       const frac = current - floor;
       const a = nearestLoaded(floor);
-      const b = nearestLoaded(Math.min(floor + 1, FRAME_COUNT - 1));
+      const b = nearestLoaded(Math.min(floor + 1, frameCount - 1));
 
       if (!a && !b) return;
       ctx.fillStyle = "#ffffff";
@@ -119,23 +140,28 @@ export default function ScrollSequence({
       const scrollable = section.offsetHeight - window.innerHeight;
       const progress =
         scrollable > 0
-          ? Math.min(Math.max(-section.getBoundingClientRect().top / scrollable, 0), 1)
+          ? Math.min(
+              Math.max(-section.getBoundingClientRect().top / scrollable, 0),
+              1,
+            )
           : 0;
       const outro = Math.min(
         Math.max((progress - OUTRO_START) / (OUTRO_END - OUTRO_START), 0),
         1,
       );
-      // ease-out so the statement decelerates into place instead of tracking
-      // the wheel one-to-one
+      // ease-out so an outro decelerates into place instead of tracking the
+      // wheel one-to-one
       const outroEased = 1 - Math.pow(1 - outro, 3);
 
       sticky.style.setProperty("--seq-progress", progress.toFixed(4));
       sticky.style.setProperty("--outro", outroEased.toFixed(4));
-      document.documentElement.style.setProperty(
-        "--seq-progress",
-        progress.toFixed(4),
-      );
-      target = progress * (FRAME_COUNT - 1);
+      if (publishGlobals) {
+        document.documentElement.style.setProperty(
+          "--seq-progress",
+          progress.toFixed(4),
+        );
+      }
+      target = progress * (frameCount - 1);
     }
 
     // Measure what is actually painted behind the logo rather than guessing
@@ -177,7 +203,7 @@ export default function ScrollSequence({
       const delta = target - current;
       current = Math.abs(delta) < 0.01 ? target : current + delta * SMOOTHING;
       render();
-      if (++sampleTick % 6 === 0) updateNavContrast();
+      if (publishGlobals && ++sampleTick % 6 === 0) updateNavContrast();
       rafId = requestAnimationFrame(tick);
     }
 
@@ -191,10 +217,12 @@ export default function ScrollSequence({
         if (!inView && rafId) {
           cancelAnimationFrame(rafId);
           rafId = 0;
-          // the loop is what animates the value, so hand the header back to
-          // its default dark-on-white state before it stops
-          navInvert = 0;
-          document.documentElement.style.setProperty("--nav-invert", "0");
+          if (publishGlobals) {
+            // the loop is what animates the value, so hand the header back to
+            // its default dark-on-white state before it stops
+            navInvert = 0;
+            document.documentElement.style.setProperty("--nav-invert", "0");
+          }
         }
       },
       { rootMargin: "200px" },
@@ -203,7 +231,7 @@ export default function ScrollSequence({
 
     (async () => {
       await Promise.all(
-        Array.from({ length: Math.min(EAGER_COUNT, FRAME_COUNT) }, (_, i) =>
+        Array.from({ length: Math.min(EAGER_COUNT, frameCount) }, (_, i) =>
           loadFrame(i),
         ),
       );
@@ -211,19 +239,19 @@ export default function ScrollSequence({
       render();
 
       if (reduced) {
-        // no scrub — just settle on the finished building
-        await loadFrame(FRAME_COUNT - 1);
+        // no scrub — just settle on the finished state
+        await loadFrame(frameCount - 1);
         if (disposed) return;
-        current = FRAME_COUNT - 1;
+        current = frameCount - 1;
         target = current;
         render();
         return;
       }
 
-      for (let i = EAGER_COUNT; i < FRAME_COUNT; i += 8) {
+      for (let i = EAGER_COUNT; i < frameCount; i += 8) {
         if (disposed) return;
         await Promise.all(
-          Array.from({ length: Math.min(8, FRAME_COUNT - i) }, (_, k) =>
+          Array.from({ length: Math.min(8, frameCount - i) }, (_, k) =>
             loadFrame(i + k),
           ),
         );
@@ -238,12 +266,14 @@ export default function ScrollSequence({
       observer.disconnect();
       window.removeEventListener("resize", resize);
     };
-  }, []);
+    // depend on the set widths rather than the array itself: a caller passing
+    // an inline literal would otherwise re-run this whole effect every render
+  }, [name, frameCount, sets[0], sets[1], publishGlobals]);
 
   return (
-    <div ref={sectionRef} className="relative h-[320vh]">
+    <div ref={sectionRef} className="relative" style={{ height: `${heightVh}vh` }}>
       <div ref={stickyRef} className="sticky top-0 h-screen w-full overflow-hidden">
-        <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
+        <canvas ref={canvasRef} className={canvasClassName} />
         {children}
       </div>
     </div>

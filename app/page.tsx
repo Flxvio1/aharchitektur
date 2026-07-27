@@ -2,6 +2,29 @@ import NavBar from "@/components/NavBar";
 import Preloader from "@/components/Preloader";
 import ScrollSequence from "@/components/ScrollSequence";
 
+const SERVICES = [
+  {
+    no: "01",
+    title: "Neubau",
+    body: "Vom Grundstück bis zum Bezug — Entwurf, Planung und Ausführung aus einer Hand.",
+  },
+  {
+    no: "02",
+    title: "Umbau & Sanierung",
+    body: "Bestand weiterdenken: mehr Licht, bessere Grundrisse, zeitgemässe Technik.",
+  },
+  {
+    no: "03",
+    title: "Innenausbau",
+    body: "Materialien, Licht und Möblierung als Teil des Entwurfs, nicht als Zusatz.",
+  },
+  {
+    no: "04",
+    title: "Baueingabe",
+    body: "Bewilligungsverfahren und Behördenkontakt, sauber vorbereitet und begleitet.",
+  },
+];
+
 const PROJECTS = [
   "NIMA",
   "TRIO",
@@ -23,7 +46,12 @@ export default function Home() {
       <NavBar />
 
       <main className="bg-background">
-        <ScrollSequence>
+        <ScrollSequence
+          name="hero"
+          frameCount={240}
+          sets={[768, 1440]}
+          publishGlobals
+        >
           {/* soft scrim: keeps the left column legible over the drawing
               without tinting the type itself */}
           <div
@@ -136,6 +164,82 @@ export default function Home() {
             </p>
           </div>
         </ScrollSequence>
+
+        {/* Interior sequence: the room furnishes itself on the right while the
+            offering is read on the left. The canvas is masked rather than
+            overlaid with a gradient div, so it dissolves into the page
+            background instead of into a hard-coded colour. */}
+        <section id="leistungen" aria-label="Leistungen">
+          <ScrollSequence
+            name="interior"
+            frameCount={160}
+            sets={[640, 1200]}
+            heightVh={300}
+            canvasClassName="absolute right-0 top-1/2 h-auto w-full -translate-y-1/2 aspect-video lg:w-[62%]"
+          >
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(to right, var(--background) 26%, transparent 62%)",
+              }}
+              aria-hidden="true"
+            />
+
+            <div className="absolute inset-0 flex flex-col justify-center px-6 sm:px-10">
+              <div
+                className="max-w-md"
+                style={{
+                  // resolves over the first third of the section, then holds
+                  opacity: "clamp(0, calc(var(--seq-progress, 0) * 6), 1)",
+                  transform:
+                    "translateY(calc((1 - clamp(0, var(--seq-progress, 0) * 6, 1)) * 24px))",
+                }}
+              >
+                <p className="mb-7 flex items-center gap-4 text-[11px] uppercase tracking-[0.32em] text-muted">
+                  <span
+                    className="h-px w-8 bg-muted/60"
+                    aria-hidden="true"
+                  />
+                  Was wir bieten
+                </p>
+
+                <h2 className="text-[9vw] font-bold leading-[0.95] tracking-[-0.035em] text-foreground sm:text-[3.4vw]">
+                  Vom Rohbau
+                  <br />
+                  zum Zuhause.
+                </h2>
+
+                <p className="mt-7 text-base leading-relaxed text-muted">
+                  Wir begleiten ein Projekt über seine ganze Länge — vom
+                  Entwurf über die Baueingabe bis zur Ausführung und dem
+                  Innenausbau.
+                </p>
+
+                <ul className="mt-10 flex flex-col">
+                  {SERVICES.map((service) => (
+                    <li
+                      key={service.title}
+                      className="flex gap-5 border-t border-line py-4 last:border-b"
+                    >
+                      <span className="pt-0.5 text-[11px] tabular-nums tracking-[0.2em] text-muted/70">
+                        {service.no}
+                      </span>
+                      <div>
+                        <h3 className="text-sm font-medium uppercase tracking-[0.12em] text-foreground">
+                          {service.title}
+                        </h3>
+                        <p className="mt-1 text-sm leading-relaxed text-muted">
+                          {service.body}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </ScrollSequence>
+        </section>
 
         <section id="projekte" className="border-t border-line px-6 py-24 sm:px-10">
           <h2 className="mb-12 text-3xl font-bold uppercase tracking-[-0.02em] text-foreground sm:text-4xl">
