@@ -49,7 +49,17 @@ export default function Home() {
         <ScrollSequence
           name="hero"
           frameCount={240}
-          sets={[768, 1440]}
+          sets={[
+            // A phone held upright crops a 16:9 still down to a narrow centre
+            // strip and blows it up ~4x, so portrait gets its own set that is
+            // already cropped. Landscape phones keep the 16:9 one.
+            {
+              dir: "portrait",
+              media: "(max-width: 899px) and (orientation: portrait)",
+            },
+            { dir: "768", media: "(max-width: 899px)" },
+            { dir: "1440" },
+          ]}
           publishGlobals
         >
           {/* soft scrim: keeps the left column legible over the drawing
@@ -173,7 +183,8 @@ export default function Home() {
           <ScrollSequence
             name="interior"
             frameCount={160}
-            sets={[640, 1200]}
+            // stays 16:9 at every size, so both sets are landscape
+            sets={[{ dir: "800", media: "(max-width: 899px)" }, { dir: "1200" }]}
             heightVh={300}
             canvasClassName="absolute right-0 top-1/2 h-auto w-full -translate-y-1/2 aspect-video lg:w-[62%]"
           >
