@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
+import frameManifest from "./frame-manifest.json";
+
 // frames fetched up front so the first paint is never an empty canvas
 const EAGER_COUNT = 16;
 // Coarse-to-fine download. The first pass lands every 8th frame across the
@@ -149,8 +151,16 @@ export default function ScrollSequence({
     let lastW = 0;
     let lastH = 0;
 
+    // Frames are served with a long max-age under filenames that never change,
+    // so a regenerated sequence would otherwise stay invisible to anyone
+    // holding the previous bytes. The manifest's content hash makes each
+    // generation a distinct cache entry.
+    const version = (frameManifest as Record<string, string>)[name];
+    const query = version ? `?v=${version}` : "";
+
     function framePath(index: number) {
-      return `/${name}/${activeDir}/frame_${String(index + 1).padStart(4, "0")}.webp`;
+      const file = String(index + 1).padStart(4, "0");
+      return `/${name}/${activeDir}/frame_${file}.webp${query}`;
     }
 
     function loadFrame(i: number) {

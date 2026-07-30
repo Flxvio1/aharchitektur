@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "frames": "node scripts/generate-frames.mjs"
+    "frames": "node scripts/generate-frames.mjs",
+    "logo-mask": "node scripts/make-logo-mask.mjs"
   },
   "dependencies": {
     "lenis": "^1.3.25",

@@ -18,7 +18,15 @@
 // comparable file size.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,12 +34,26 @@ import ffmpeg from "ffmpeg-static";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+// Frame filenames never change, but their contents do — so without a version
+// in the URL a regenerated sequence is invisible to anyone holding the old
+// bytes, and public/ is served with a long max-age precisely so those bytes
+// get held. ScrollSequence reads this file and hangs it off every frame
+// request as ?v=…, which makes each generation its own cache entry.
+const MANIFEST = resolve(root, "components/frame-manifest.json");
+
 const SEQUENCES = {
   // plan drawing resolving into the finished building
   hero: {
     source: "assets/video/hero.mp4",
     frameCount: 240,
     fps: 24,
+    // The generator stamped a sparkle into the lower right of every frame. It
+    // sits over the building in the closing shots, so cropping it away would
+    // cost the composition — removelogo paints it out of the source instead,
+    // guided by a mask that hugs the star (see scripts/make-logo-mask.mjs; a
+    // plain delogo rectangle here leaves an obvious smear because it has to
+    // interpolate across the whole box, hedge and loggia included).
+    logoMask: "scripts/hero-logo-mask.png",
     variants: [
       { dir: "1440", width: 1440, height: 810, quality: 58 },
       // small landscape — phones held sideways, narrow tablet windows
@@ -72,6 +94,78 @@ function sourceSize(file) {
   const match = text.match(/Video:.*?, (\d+)x(\d+)/);
   if (!match) throw new Error(`Could not read video dimensions from ${file}`);
   return { width: Number(match[1]), height: Number(match[2]) };
+}
+
+// Hash of everything the sequence emitted, path names included. Derived from
+// the content rather than the clock so a regeneration that produces identical
+// frames leaves the manifest — and every cache keyed on it — untouched.
+function hashSequence(name) {
+  const hash = createHash("sha1");
+  const walk = (dir, prefix) => {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    entries.sort((a, b) => (a.name < b.name ? -1 : 1));
+    for (const entry of entries) {
+      const path = resolve(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(path, `${prefix}${entry.name}/`);
+      } else {
+        hash.update(`${prefix}${entry.name}`);
+        hash.update(readFileSync(path));
+      }
+    }
+  };
+  walk(resolve(root, "public", name), "");
+  return hash.digest("hex").slice(0, 10);
+}
+
+// merged rather than overwritten: a run can be scoped to one sequence
+function writeManifest(name, version) {
+  const manifest = existsSync(MANIFEST)
+    ? JSON.parse(readFileSync(MANIFEST, "utf8"))
+    : {};
+  manifest[name] = version;
+  const sorted = Object.fromEntries(
+    Object.keys(manifest)
+      .sort()
+      .map((key) => [key, manifest[key]]),
+  );
+  writeFileSync(MANIFEST, `${JSON.stringify(sorted, null, 2)}\n`);
+}
+
+// PNG puts width and height in the IHDR chunk, first thing after the signature
+function pngSize(file) {
+  const head = readFileSync(file).subarray(16, 24);
+  return { width: head.readUInt32BE(0), height: head.readUInt32BE(4) };
+}
+
+// removelogo indexes the mask against the frame pixel for pixel, so a mask
+// built for a differently sized export would silently paint the wrong region.
+//
+// The path goes into the filtergraph as written, and that parser reads ':' as
+// an option separator — a Windows absolute path cannot be escaped past it
+// reliably. Hence the repo-relative path, with ffmpeg run from the repo root.
+function removelogoFilter(maskPath, srcW, srcH) {
+  if (/[\\:'[\],;]/.test(maskPath)) {
+    console.error(
+      `Logo mask path "${maskPath}" contains a filtergraph metacharacter. ` +
+        "Keep it repo-relative with forward slashes.",
+    );
+    process.exit(1);
+  }
+  const mask = resolve(root, maskPath);
+  if (!existsSync(mask)) {
+    console.error(`Logo mask not found: ${mask}\nRun \`bun run logo-mask\` first.`);
+    process.exit(1);
+  }
+  const { width, height } = pngSize(mask);
+  if (width !== srcW || height !== srcH) {
+    console.error(
+      `Logo mask is ${width}x${height} but the source is ${srcW}x${srcH}.\n` +
+        "Re-run `bun run logo-mask` against the current video.",
+    );
+    process.exit(1);
+  }
+  return `removelogo=filename=${maskPath}`;
 }
 
 // largest centred rectangle of `aspect` that fits the source; a no-op when the
@@ -125,6 +219,9 @@ for (const name of names) {
         "-vf",
         [
           `fps=${seq.fps}`,
+          // after fps so it only runs on frames that survive, and before crop
+          // so the mask stays in source coordinates for every variant
+          ...(seq.logoMask ? [removelogoFilter(seq.logoMask, srcW, srcH)] : []),
           `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}`,
           `scale=${width}:${height}:flags=lanczos`,
         ].join(","),
@@ -142,9 +239,14 @@ for (const name of names) {
         "picture",
         resolve(outDir, "frame_%04d.webp"),
       ],
-      { stdio: "inherit" },
+      // from the repo root so the mask path in the filtergraph resolves
+      { stdio: "inherit", cwd: root },
     );
   }
+
+  const version = hashSequence(name);
+  writeManifest(name, version);
+  console.log(`[${name}] version ${version}`);
 }
 
 console.log("Done.");
