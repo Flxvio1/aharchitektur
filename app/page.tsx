@@ -25,6 +25,10 @@ const SERVICES = [
   },
 ];
 
+// what the hero sequence actually shows, in order: the plan drawing, the
+// volumes assembling, the finished building at dusk
+const PHASES = ["Entwurf", "Ausführung", "Übergabe"];
+
 const PROJECTS = [
   "NIMA",
   "TRIO",
@@ -143,6 +147,60 @@ export default function Home() {
               >
                 Scrollen
                 <span className="h-8 w-px bg-gradient-to-b from-muted/70 to-transparent" />
+              </div>
+            </div>
+          </div>
+
+          {/* Bauphasen. The hero is literally a three-stage sequence — plan,
+              structure, finished house — but nothing said so, which left the
+              scrub reading as decoration. Naming the stages turns it into a
+              position indicator, and it fills the empty lower right. Kept out
+              of the left column's early fade so it stays with the render for
+              the whole scrub. */}
+          <div
+            className="pointer-events-none absolute bottom-10 right-6 hidden opacity-0 sm:right-10 sm:block"
+            style={{ animation: "fade-up 900ms ease-out 3400ms both" }}
+            aria-hidden="true"
+          >
+            <div
+              className="flex gap-4"
+              style={{
+                opacity: "calc(1 - var(--outro, 0))",
+                // this corner runs from white plan to dusk render, so the
+                // marks ride the same luminance signal the header does
+                filter: "brightness(0) invert(var(--nav-invert, 0))",
+              }}
+            >
+              <ul className="flex h-32 flex-col justify-between text-right">
+                {PHASES.map((phase, i) => (
+                  <li
+                    key={phase}
+                    className="flex items-center justify-end gap-3 text-[10px] uppercase leading-none tracking-[0.28em] text-foreground"
+                    style={{
+                      // lights up as the sequence reaches it, and stays lit —
+                      // the phases accumulate rather than take turns
+                      opacity: `clamp(0.3, calc((var(--seq-progress, 0) * 3 - ${i}) * 3 + 1), 1)`,
+                    }}
+                  >
+                    {phase}
+                    <span className="text-[9px] tabular-nums tracking-[0.1em]">
+                      {`0${i + 1}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* a dimension line lifted off an elevation drawing, doing double
+                  duty as the sequence playhead */}
+              <div className="relative my-[5px] w-px bg-foreground/25">
+                <div
+                  className="absolute inset-x-0 top-0 bg-foreground"
+                  style={{ height: "calc(var(--seq-progress, 0) * 100%)" }}
+                />
+                <span
+                  className="absolute -left-[5px] h-px w-[11px] bg-foreground"
+                  style={{ top: "calc(var(--seq-progress, 0) * 100%)" }}
+                />
               </div>
             </div>
           </div>
